@@ -51,3 +51,12 @@ main().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });
+
+// Graceful shutdown
+function shutdown(signal: string) {
+  console.log(`\n${signal} received. Shutting down...`);
+  process.exit(0);
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));

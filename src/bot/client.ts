@@ -13,11 +13,13 @@ import {
   formatTextResponse,
   formatToolResult,
   containsQuestion,
-} from '../bot/formatter.js';
+} from './formatter.js';
 import { AppConfig } from '../config/types.js';
 
 // Active sessions: channelId -> ClaudeSession
 const sessions = new Map<string, ClaudeSession>();
+// Typing indicator intervals per channel
+const sessionTypingIntervals = new Map<string, NodeJS.Timeout>();
 
 export function createClient(config: AppConfig): Client {
   const client = new Client({
@@ -62,8 +64,8 @@ export function createClient(config: AppConfig): Client {
     channel.sendTyping();
     const typingInterval = setInterval(() => channel.sendTyping(), 8000);
 
-    // Store interval on session so we can clear it on response
-    (session as any)._typingInterval = typingInterval;
+    // Store interval reference for cleanup
+    sessionTypingIntervals.set(message.channelId, typingInterval);
 
     // Send message to Claude
     try {
@@ -99,7 +101,7 @@ function createSession(
     responseBuffer = '';
 
     const mention = containsQuestion(text) ? `<@${config.userId}> ` : '';
-    const formatted = formatTextResponse(mention + text);
+    const formatted = formatTextResponse(text, mention);
 
     await channel.send({
       content: formatted.content,
@@ -115,20 +117,25 @@ function createSession(
     responseTimeout = setTimeout(flushResponse, 500);
   });
 
-  session.on('toolUse', (name: string, input: Record<string, unknown>) => {
-    // Tool uses are reported when result comes back
-    // For now just log that Claude is using a tool
+  session.on('toolUse', async (name: string, input: Record<string, unknown>) => {
     const formatted = formatToolResult(name, input);
-    channel.send({
-      content: formatted.content,
-      files: formatted.files,
-    });
+    try {
+      await channel.send({
+        content: formatted.content,
+        files: formatted.files,
+      });
+    } catch (err) {
+      console.error(`Failed to send tool use message:`, err);
+    }
   });
 
   session.on('result', async (_text: string, isError: boolean) => {
     // Clear typing indicator
-    const interval = (session as any)._typingInterval;
-    if (interval) clearInterval(interval);
+    const interval = sessionTypingIntervals.get(channelId);
+    if (interval) {
+      clearInterval(interval);
+      sessionTypingIntervals.delete(channelId);
+    }
 
     // Flush any remaining buffered text
     if (responseTimeout) clearTimeout(responseTimeout);
@@ -144,8 +151,11 @@ function createSession(
   });
 
   session.on('exit', async (code: number | null) => {
-    const interval = (session as any)._typingInterval;
-    if (interval) clearInterval(interval);
+    const interval = sessionTypingIntervals.get(channelId);
+    if (interval) {
+      clearInterval(interval);
+      sessionTypingIntervals.delete(channelId);
+    }
 
     if (code !== 0 && code !== null) {
       await channel.send('Claude session ended unexpectedly. Use `/restart` to start a new session.');

@@ -18,14 +18,6 @@ export interface StreamMessage {
   is_error?: boolean;
 }
 
-export interface SessionEvents {
-  message: (text: string) => void;
-  toolUse: (name: string, input: Record<string, unknown>) => void;
-  result: (text: string, isError: boolean) => void;
-  error: (error: Error) => void;
-  exit: (code: number | null) => void;
-}
-
 export class ClaudeSession extends EventEmitter {
   private process: ChildProcess | null = null;
   private containerName: string;

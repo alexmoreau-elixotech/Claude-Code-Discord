@@ -1,7 +1,8 @@
 {
   "name": "claude-code-assistant",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/index.js",
   "directories": {
     "doc": "docs"
   },

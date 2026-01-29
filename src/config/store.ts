@@ -1,8 +1,11 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { ProjectsData, ProjectConfig } from './types.js';
 
-const DATA_DIR = join(process.cwd(), 'data');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DATA_DIR = join(__dirname, '..', '..', 'data');
 const PROJECTS_FILE = join(DATA_DIR, 'projects.json');
 
 function ensureDataDir(): void {

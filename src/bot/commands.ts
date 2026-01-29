@@ -99,6 +99,9 @@ async function handleNewProject(
   await interaction.deferReply();
 
   try {
+    // Create Docker container first (more likely to fail)
+    const { containerName, volumeName } = await createContainer(name, config.claudeHome);
+
     // Create Discord channel
     const guild = interaction.guild!;
     const channel = await guild.channels.create({
@@ -106,9 +109,6 @@ async function handleNewProject(
       type: ChannelType.GuildText,
       topic: `Claude Code project: ${name}`,
     });
-
-    // Create Docker container
-    const { containerName, volumeName } = await createContainer(name, config.claudeHome);
 
     // Save project config
     saveProject(name, {
@@ -132,7 +132,7 @@ async function handleNewProject(
 
 async function handleDeleteProject(
   interaction: ChatInputCommandInteraction,
-  config: AppConfig
+  _config: AppConfig
 ): Promise<void> {
   const project = getProjectByChannelId(interaction.channelId);
   if (!project) {

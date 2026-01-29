@@ -9,16 +9,19 @@ export interface FormattedResponse {
   files: AttachmentBuilder[];
 }
 
-export function formatTextResponse(text: string): FormattedResponse {
+export function formatTextResponse(text: string, prefix: string = ''): FormattedResponse {
   const files: AttachmentBuilder[] = [];
+  const fullContent = prefix + text;
 
   // If the message fits in Discord, send as-is
-  if (text.length <= MAX_DISCORD_MESSAGE_LENGTH) {
-    return { content: text, files };
+  if (fullContent.length <= MAX_DISCORD_MESSAGE_LENGTH) {
+    return { content: fullContent, files };
   }
 
   // Message too long - truncate and attach full version
-  const truncated = text.slice(0, MAX_DISCORD_MESSAGE_LENGTH - 100);
+  const suffix = '\n\n*(full response attached)*';
+  const maxLength = MAX_DISCORD_MESSAGE_LENGTH - prefix.length - suffix.length;
+  const truncated = prefix + text.slice(0, maxLength);
   const attachment = new AttachmentBuilder(Buffer.from(text, 'utf-8'), {
     name: 'full-response.md',
     description: 'Full response from Claude',
@@ -26,7 +29,7 @@ export function formatTextResponse(text: string): FormattedResponse {
   files.push(attachment);
 
   return {
-    content: truncated + '\n\n*(full response attached)*',
+    content: truncated + suffix,
     files,
   };
 }
