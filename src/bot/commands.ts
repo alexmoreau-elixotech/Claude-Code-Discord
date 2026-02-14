@@ -16,6 +16,7 @@ import {
 import {
   createContainer,
   removeContainer,
+  recreateContainer,
   getContainerStatus,
 } from '../container/manager.js';
 import { removeSession } from './client.js';
@@ -40,6 +41,24 @@ const commands = [
   new SlashCommandBuilder()
     .setName('logs')
     .setDescription('Show recent logs from the Claude session'),
+  new SlashCommandBuilder()
+    .setName('env')
+    .setDescription('Manage environment variables for this project')
+    .addSubcommand((sub) =>
+      sub.setName('set')
+        .setDescription('Set an environment variable (recreates container)')
+        .addStringOption((opt) => opt.setName('key').setDescription('Variable name').setRequired(true))
+        .addStringOption((opt) => opt.setName('value').setDescription('Variable value').setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub.setName('remove')
+        .setDescription('Remove an environment variable (recreates container)')
+        .addStringOption((opt) => opt.setName('key').setDescription('Variable name').setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub.setName('list')
+        .setDescription('List all environment variables for this project')
+    ),
 ];
 
 export async function registerCommands(config: AppConfig): Promise<void> {
@@ -59,8 +78,11 @@ export async function handleCommand(
   interaction: ChatInputCommandInteraction,
   config: AppConfig
 ): Promise<void> {
-  // Only allow the configured user
-  if (interaction.user.id !== config.userId) {
+  // Authorization: check role or user ID
+  const member = interaction.member as { roles: { cache: Map<string, unknown> } } | null;
+  const hasRole = config.roleId && member?.roles.cache.has(config.roleId);
+  const isUser = config.userId && interaction.user.id === config.userId;
+  if (!hasRole && !isUser) {
     await interaction.reply({ content: 'Unauthorized.', ephemeral: true });
     return;
   }
@@ -81,6 +103,9 @@ export async function handleCommand(
     case 'logs':
       await handleLogs(interaction);
       break;
+    case 'env':
+      await handleEnv(interaction, config);
+      break;
   }
 }
 
@@ -100,14 +125,33 @@ async function handleNewProject(
 
   try {
     // Create Docker container first (more likely to fail)
-    const { containerName, volumeName } = await createContainer(name, config.claudeHome);
+    const { containerName, volumeName } = await createContainer(name, {
+      claudeHome: config.claudeHome,
+      sshPath: config.sshPath,
+      gitconfigPath: config.gitconfigPath,
+      ghToken: config.ghToken,
+      claudeMdPath: config.claudeMdPath,
+      gitUserName: config.gitUserName,
+      gitUserEmail: config.gitUserEmail,
+    });
 
-    // Create Discord channel
+    // Create Discord channel under a "Claude Projects" category
     const guild = interaction.guild!;
+    let category = guild.channels.cache.find(
+      (c) => c.name === 'Claude Projects' && c.type === ChannelType.GuildCategory
+    );
+    if (!category) {
+      category = await guild.channels.create({
+        name: 'Claude Projects',
+        type: ChannelType.GuildCategory,
+      });
+    }
+
     const channel = await guild.channels.create({
       name: `project-${name}`,
       type: ChannelType.GuildText,
       topic: `Claude Code project: ${name}`,
+      parent: category.id,
     });
 
     // Save project config
@@ -200,4 +244,81 @@ async function handleRestart(interaction: ChatInputCommandInteraction): Promise<
 async function handleLogs(interaction: ChatInputCommandInteraction): Promise<void> {
   // Placeholder - will be enhanced later
   await interaction.reply('Logs feature coming soon.');
+}
+
+async function handleEnv(
+  interaction: ChatInputCommandInteraction,
+  config: AppConfig
+): Promise<void> {
+  const project = getProjectByChannelId(interaction.channelId);
+  if (!project) {
+    await interaction.reply({ content: 'This channel is not a project channel.', ephemeral: true });
+    return;
+  }
+
+  const sub = interaction.options.getSubcommand();
+
+  if (sub === 'list') {
+    const vars = project.config.envVars || {};
+    const entries = Object.entries(vars);
+    if (entries.length === 0) {
+      await interaction.reply('No project environment variables set.');
+      return;
+    }
+    const list = entries.map(([k, v]) => `\`${k}\` = \`${v}\``).join('\n');
+    await interaction.reply(`**Environment variables:**\n${list}`);
+    return;
+  }
+
+  const key = interaction.options.getString('key', true);
+
+  if (sub === 'set') {
+    const value = interaction.options.getString('value', true);
+    await interaction.deferReply();
+
+    const envVars = { ...project.config.envVars, [key]: value };
+    project.config.envVars = envVars;
+    saveProject(project.name, project.config);
+
+    // Kill session and recreate container with new env vars
+    removeSession(interaction.channelId);
+    await recreateContainer(project.name, {
+      claudeHome: config.claudeHome,
+      sshPath: config.sshPath,
+      gitconfigPath: config.gitconfigPath,
+      ghToken: config.ghToken,
+      claudeMdPath: config.claudeMdPath,
+      gitUserName: config.gitUserName,
+      gitUserEmail: config.gitUserEmail,
+      envVars,
+    });
+
+    await interaction.editReply(`Set \`${key}\` and recreated container.`);
+  } else if (sub === 'remove') {
+    await interaction.deferReply();
+
+    const envVars = { ...project.config.envVars };
+    if (!(key in envVars)) {
+      await interaction.editReply(`\`${key}\` is not set.`);
+      return;
+    }
+    delete envVars[key];
+    project.config.envVars = Object.keys(envVars).length > 0 ? envVars : undefined;
+    saveProject(project.name, project.config);
+
+    // Kill session and recreate container
+    removeSession(interaction.channelId);
+    await recreateContainer(project.name, {
+      claudeHome: config.claudeHome,
+      sshPath: config.sshPath,
+      gitconfigPath: config.gitconfigPath,
+      ghToken: config.ghToken,
+      claudeMdPath: config.claudeMdPath,
+      gitUserName: config.gitUserName,
+      gitUserEmail: config.gitUserEmail,
+      envVars: project.config.envVars,
+    });
+
+    await interaction.editReply(`Removed \`${key}\` and recreated container.`);
+  }
 }
