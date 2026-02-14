@@ -92,6 +92,7 @@ Var DockerDialog
 Var DockerLabel
 Var DockerStatusLabel
 Var DockerFound
+Var DockerInstallCheckbox
 
 ; ---------------------------------------------------------------------------
 ; Custom page: Docker Desktop prerequisite check
@@ -130,14 +131,18 @@ Function DockerCheckPage
         Goto docker_found
     ${EndIf}
 
-    ; Docker not found
+    ; Docker not found — offer to install
     StrCpy $DockerFound "0"
-    ${NSD_CreateLabel} 0 32u 100% 48u \
-        "WARNING: Docker Desktop was not detected on this system.$\r$\n$\r$\n\
-${PRODUCT_NAME} requires Docker Desktop to run. You can install it later, but the application will not start without it."
+    ${NSD_CreateLabel} 0 32u 100% 40u \
+        "Docker Desktop is required but was not found on this system.$\r$\n$\r$\n\
+Docker Desktop will be downloaded (~500 MB) and installed. This may take several minutes."
     Pop $DockerStatusLabel
 
-    ${NSD_CreateLink} 0 88u 100% 16u "Download Docker Desktop: https://www.docker.com/products/docker-desktop/"
+    ${NSD_CreateCheckbox} 0 80u 100% 16u "Install Docker Desktop automatically (recommended)"
+    Pop $DockerInstallCheckbox
+    ${NSD_Check} $DockerInstallCheckbox
+
+    ${NSD_CreateLink} 0 104u 100% 16u "Or download manually: https://www.docker.com/products/docker-desktop/"
     Pop $0
     ${NSD_OnClick} $0 OnDockerLinkClick
 
@@ -158,7 +163,51 @@ Function OnDockerLinkClick
 FunctionEnd
 
 Function DockerCheckPageLeave
-    ; Allow continuing regardless of Docker status
+    ${If} $DockerFound == "1"
+        ; Docker already installed, continue
+        Return
+    ${EndIf}
+
+    ; Check if user wants auto-install
+    ${NSD_GetState} $DockerInstallCheckbox $0
+    ${If} $0 != ${BST_CHECKED}
+        ; User unchecked the box — warn and continue
+        MessageBox MB_YESNO|MB_ICONEXCLAMATION \
+            "Docker Desktop is not installed. ${PRODUCT_NAME} will not work without it.$\r$\n$\r$\nContinue installation anyway?" \
+            IDYES continue_without_docker
+        Abort ; Go back to the page
+continue_without_docker:
+        Return
+    ${EndIf}
+
+    ; Download and install Docker Desktop
+    DetailPrint "Downloading Docker Desktop installer..."
+    NSISdl::download "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe" "$TEMP\DockerDesktopInstaller.exe"
+    Pop $0
+    ${If} $0 != "success"
+        MessageBox MB_YESNO|MB_ICONEXCLAMATION \
+            "Failed to download Docker Desktop ($0).$\r$\n$\r$\nYou can install Docker Desktop manually later.$\r$\nContinue with ${PRODUCT_NAME} installation?" \
+            IDYES continue_without_docker_dl
+        Abort
+continue_without_docker_dl:
+        Return
+    ${EndIf}
+
+    DetailPrint "Installing Docker Desktop (this may take a few minutes)..."
+    ; Run Docker Desktop installer with install flag and auto-accept
+    nsExec::ExecToLog '"$TEMP\DockerDesktopInstaller.exe" install --quiet --accept-license'
+    Pop $0
+    ${If} $0 == "0"
+        DetailPrint "Docker Desktop installed successfully."
+        Delete "$TEMP\DockerDesktopInstaller.exe"
+        MessageBox MB_OK|MB_ICONINFORMATION \
+            "Docker Desktop has been installed.$\r$\n$\r$\nYou may need to restart your computer and start Docker Desktop before using ${PRODUCT_NAME}."
+    ${Else}
+        DetailPrint "Docker Desktop installer returned code: $0"
+        Delete "$TEMP\DockerDesktopInstaller.exe"
+        MessageBox MB_OK|MB_ICONEXCLAMATION \
+            "Docker Desktop installation may not have completed successfully (exit code: $0).$\r$\n$\r$\nPlease verify Docker Desktop is installed before using ${PRODUCT_NAME}."
+    ${EndIf}
 FunctionEnd
 
 ; ---------------------------------------------------------------------------
