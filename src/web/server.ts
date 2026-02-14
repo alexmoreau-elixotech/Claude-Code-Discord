@@ -23,11 +23,17 @@ interface PendingDownload {
 const downloads = new Map<string, PendingDownload>();
 
 export function addDownload(filename: string, data: Buffer): string {
+  // Clean up any expired downloads first
+  const now = Date.now();
+  for (const [id, dl] of downloads.entries()) {
+    if (now > dl.expiresAt) downloads.delete(id);
+  }
+
   const id = randomUUID();
   downloads.set(id, {
     filename,
     data,
-    expiresAt: Date.now() + 10 * 60 * 1000,
+    expiresAt: now + 10 * 60 * 1000,
   });
   return id;
 }

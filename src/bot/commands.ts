@@ -329,6 +329,8 @@ async function handleEnv(
 
     // Kill session and recreate container with new env vars
     removeSession(interaction.channelId);
+    project.config.previewPid = undefined;
+    saveProject(project.name, project.config);
     await recreateContainer(project.name, {
       claudeHome: config.claudeHome,
       sshPath: config.sshPath,
@@ -352,10 +354,11 @@ async function handleEnv(
     }
     delete envVars[key];
     project.config.envVars = Object.keys(envVars).length > 0 ? envVars : undefined;
-    saveProject(project.name, project.config);
 
     // Kill session and recreate container
     removeSession(interaction.channelId);
+    project.config.previewPid = undefined;
+    saveProject(project.name, project.config);
     await recreateContainer(project.name, {
       claudeHome: config.claudeHome,
       sshPath: config.sshPath,
@@ -575,6 +578,9 @@ async function handlePreview(
       'bash', '-c', `${serverCmd} > /tmp/preview.log 2>&1 & echo $!`,
     ]);
     const pid = parseInt(pidOut.trim(), 10);
+    if (!Number.isInteger(pid) || pid <= 0) {
+      throw new Error('Failed to start preview server');
+    }
     project.config.previewPid = pid;
     saveProject(project.name, project.config);
 
