@@ -1,18 +1,22 @@
 // src/index.ts
 import 'dotenv/config';
 import { Events } from 'discord.js';
-import { loadAppConfig } from './config/types.js';
+import { loadAppConfigFromFile } from './config/types.js';
 import { createClient } from './bot/client.js';
 import { registerCommands, handleCommand } from './bot/commands.js';
 import { imageExists, buildImage } from './container/manager.js';
 import { getAllProjects } from './config/store.js';
 import { ensureContainerRunning } from './container/manager.js';
+import { startWebServer, setOnSetupComplete } from './web/server.js';
+import { isSetupComplete, readConfig } from './config/config-file.js';
 
-async function main(): Promise<void> {
-  console.log('Claude Code Assistant starting...');
+let botRunning = false;
 
-  // Load config
-  const config = loadAppConfig();
+async function startBot(): Promise<void> {
+  if (botRunning) return;
+
+  const fileConfig = readConfig();
+  const config = loadAppConfigFromFile(fileConfig);
 
   // Check Docker image exists
   const hasImage = await imageExists();
@@ -25,7 +29,6 @@ async function main(): Promise<void> {
   // Create Discord client
   const client = createClient(config);
 
-  // Register slash commands
   client.on(Events.ClientReady, async () => {
     await registerCommands(config);
 
@@ -37,14 +40,32 @@ async function main(): Promise<void> {
     }
   });
 
-  // Handle slash commands
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     await handleCommand(interaction, config);
   });
 
-  // Login
   await client.login(config.discordToken);
+  botRunning = true;
+  console.log('Discord bot started.');
+}
+
+async function main(): Promise<void> {
+  console.log('Claude Code Assistant starting...');
+
+  // Register callback for when setup completes via web UI
+  setOnSetupComplete(startBot);
+
+  // Always start the web server
+  await startWebServer();
+
+  // If setup is complete, also start the bot
+  if (isSetupComplete()) {
+    console.log('Setup complete. Starting Discord bot...');
+    await startBot();
+  } else {
+    console.log('Setup not complete. Open http://localhost:3456 to configure.');
+  }
 }
 
 main().catch((err) => {
