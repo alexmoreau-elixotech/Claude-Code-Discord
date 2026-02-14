@@ -7,6 +7,7 @@ import {
   ChannelType,
   TextChannel,
   EmbedBuilder,
+  AttachmentBuilder,
 } from 'discord.js';
 import {
   saveProject,
@@ -19,9 +20,12 @@ import {
   removeContainer,
   recreateContainer,
   getContainerStatus,
+  execInContainer,
+  readFileFromContainer,
 } from '../container/manager.js';
 import { removeSession } from './client.js';
 import { AppConfig } from '../config/types.js';
+import { addDownload } from '../web/server.js';
 
 const commands = [
   new SlashCommandBuilder()
@@ -63,6 +67,9 @@ const commands = [
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('Show what you can do with Claude and example prompts'),
+  new SlashCommandBuilder()
+    .setName('export')
+    .setDescription('Download your project as a zip file'),
 ];
 
 export async function registerCommands(config: AppConfig): Promise<void> {
@@ -112,6 +119,9 @@ export async function handleCommand(
       break;
     case 'help':
       await handleHelp(interaction);
+      break;
+    case 'export':
+      await handleExport(interaction, config);
       break;
   }
 }
@@ -342,6 +352,86 @@ async function handleEnv(
     });
 
     await interaction.editReply(`Removed \`${key}\` and recreated container.`);
+  }
+}
+
+async function handleExport(
+  interaction: ChatInputCommandInteraction,
+  _config: AppConfig
+): Promise<void> {
+  const project = getProjectByChannelId(interaction.channelId);
+  if (!project) {
+    await interaction.reply({ content: 'This channel is not a project channel.', ephemeral: true });
+    return;
+  }
+
+  await interaction.deferReply();
+
+  try {
+    // Create zip inside container
+    const zipPath = '/tmp/export.zip';
+    const { exitCode, stderr } = await execInContainer(project.config.containerName, [
+      'bash', '-c',
+      `cd /workspace && zip -r ${zipPath} . -x "node_modules/*" ".git/*" "dist/*" "__pycache__/*" ".cache/*"`,
+    ]);
+
+    if (exitCode !== 0) {
+      await interaction.editReply(`Failed to create zip: ${stderr}`);
+      return;
+    }
+
+    // Get file size
+    const { stdout: sizeOut } = await execInContainer(project.config.containerName, [
+      'stat', '-c', '%s', zipPath,
+    ]);
+    const fileSize = parseInt(sizeOut.trim(), 10);
+    const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(1);
+
+    // Get file count
+    const { stdout: countOut } = await execInContainer(project.config.containerName, [
+      'bash', '-c', 'find /workspace -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/dist/*" -not -path "*/__pycache__/*" -not -path "*/.cache/*" -type f | wc -l',
+    ]);
+    const fileCount = countOut.trim();
+
+    const MAX_DISCORD_SIZE = 25 * 1024 * 1024; // 25MB
+
+    if (fileSize <= MAX_DISCORD_SIZE) {
+      // Read zip and send as Discord attachment
+      const zipBuffer = await readFileFromContainer(project.config.containerName, zipPath);
+      const attachment = new AttachmentBuilder(zipBuffer, {
+        name: `${project.name}.zip`,
+        description: `Project export of ${project.name}`,
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle('Project exported')
+        .setDescription(`**${project.name}** \u2014 ${fileCount} files, ${fileSizeMB} MB`)
+        .setColor(0x00cc00);
+
+      await interaction.editReply({ embeds: [embed], files: [attachment] });
+    } else {
+      // Too large for Discord — serve via web dashboard
+      const zipBuffer = await readFileFromContainer(project.config.containerName, zipPath);
+      const downloadId = addDownload(`${project.name}.zip`, zipBuffer);
+      const port = process.env.PORT || 3456;
+
+      const embed = new EmbedBuilder()
+        .setTitle('Project exported')
+        .setDescription(
+          `**${project.name}** \u2014 ${fileCount} files, ${fileSizeMB} MB\n\n` +
+          `File is too large for Discord. Download it here (link expires in 10 minutes):\n` +
+          `http://localhost:${port}/download/${downloadId}`
+        )
+        .setColor(0x00cc00);
+
+      await interaction.editReply({ embeds: [embed] });
+    }
+
+    // Clean up zip inside container
+    await execInContainer(project.config.containerName, ['rm', '-f', zipPath]);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    await interaction.editReply(`Failed to export: ${msg}`);
   }
 }
 

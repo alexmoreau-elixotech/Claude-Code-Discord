@@ -279,6 +279,33 @@ export async function writeFileToContainer(
   await new Promise<void>((resolve) => writeStream.on('end', resolve));
 }
 
+export async function readFileFromContainer(
+  containerName: string,
+  filePath: string,
+): Promise<Buffer> {
+  const container = docker.getContainer(containerName);
+  const exec = await container.exec({
+    Cmd: ['cat', filePath],
+    AttachStdout: true,
+    AttachStderr: true,
+    AttachStdin: false,
+  });
+
+  const stream = await exec.start({ hijack: true, stdin: false });
+
+  return new Promise((resolve, reject) => {
+    const stdoutChunks: Buffer[] = [];
+    docker.modem.demuxStream(stream, {
+      write: (chunk: Buffer) => stdoutChunks.push(chunk),
+    } as unknown as NodeJS.WritableStream, {
+      write: () => {},
+    } as unknown as NodeJS.WritableStream);
+
+    stream.on('end', () => resolve(Buffer.concat(stdoutChunks)));
+    stream.on('error', reject);
+  });
+}
+
 export async function imageExists(): Promise<boolean> {
   try {
     await docker.getImage(IMAGE_NAME).inspect();
