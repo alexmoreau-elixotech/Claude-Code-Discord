@@ -16,7 +16,7 @@ export function getOnSetupComplete(): (() => Promise<void>) | null {
 export function startWebServer(port: number = 3456): Promise<void> {
   const app = express();
 
-  app.use(express.json());
+  app.use(express.json({ limit: '1mb' }));
 
   // Serve static files from web/ directory
   app.use(express.static(join(process.cwd(), 'web')));
@@ -30,10 +30,11 @@ export function startWebServer(port: number = 3456): Promise<void> {
     res.sendFile(join(process.cwd(), 'web', 'index.html'));
   });
 
-  return new Promise((resolve) => {
-    app.listen(port, () => {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
       console.log(`Web UI available at http://localhost:${port}`);
       resolve();
     });
+    server.on('error', reject);
   });
 }

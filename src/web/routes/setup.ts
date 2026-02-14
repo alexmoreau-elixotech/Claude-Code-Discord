@@ -32,7 +32,8 @@ export function setupRoutes(): Router {
         botId: bot.id,
         appId,
       });
-    } catch {
+    } catch (err) {
+      console.error('Failed to validate token:', err);
       res.json({ valid: false, error: 'Invalid token' });
     }
   });
@@ -40,11 +41,16 @@ export function setupRoutes(): Router {
   // List guilds the bot is in
   router.post('/guilds', async (req, res) => {
     const { token } = req.body;
+    if (!token) {
+      res.status(400).json({ error: 'Token is required' });
+      return;
+    }
     try {
       const rest = new REST({ version: '10' }).setToken(token);
       const guilds = await rest.get('/users/@me/guilds') as Array<{ id: string; name: string; icon: string | null }>;
       res.json(guilds.map(g => ({ id: g.id, name: g.name, icon: g.icon })));
-    } catch {
+    } catch (err) {
+      console.error('Failed to fetch guilds:', err);
       res.status(400).json({ error: 'Failed to fetch guilds' });
     }
   });
@@ -52,6 +58,10 @@ export function setupRoutes(): Router {
   // List roles in a guild
   router.post('/guild-roles', async (req, res) => {
     const { token, guildId } = req.body;
+    if (!token || !guildId) {
+      res.status(400).json({ error: 'Token and guildId are required' });
+      return;
+    }
     try {
       const rest = new REST({ version: '10' }).setToken(token);
       const roles = await rest.get(`/guilds/${guildId}/roles`) as Array<{ id: string; name: string; position: number }>;
@@ -59,7 +69,8 @@ export function setupRoutes(): Router {
         .filter(r => r.name !== '@everyone')
         .sort((a, b) => b.position - a.position);
       res.json(filtered.map(r => ({ id: r.id, name: r.name })));
-    } catch {
+    } catch (err) {
+      console.error('Failed to fetch guild roles:', err);
       res.status(400).json({ error: 'Failed to fetch roles' });
     }
   });
