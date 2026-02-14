@@ -18,6 +18,7 @@ import { ClaudeSession } from '../bridge/session.js';
 import {
   formatTextResponse,
   containsQuestion,
+  friendlyError,
 } from './formatter.js';
 import { AppConfig } from '../config/types.js';
 
@@ -70,7 +71,7 @@ export function createClient(config: AppConfig): Client {
 
     const running = await ensureContainerRunning(project.config.containerName);
     if (!running) {
-      await message.reply('Container is not running. Try `/restart` to fix.');
+      await message.reply(friendlyError('Container is not running'));
       return;
     }
 
@@ -143,7 +144,7 @@ export function createClient(config: AppConfig): Client {
     try {
       session.sendMessage(text);
     } catch {
-      await thread.send('Failed to send message to Claude. Try `/restart`.');
+      await thread.send(friendlyError('Failed to send message to Claude'));
     }
   });
 
@@ -341,7 +342,7 @@ function createSession(
       // Question was already shown with buttons — don't duplicate as embed
       handledAskUser = false;
     } else if (isError) {
-      await sendEmbed('Claude encountered an error while processing.', 0xcc0000);
+      await sendEmbed(friendlyError('Claude encountered an error while processing.'), 0xcc0000);
     } else if (text) {
       await sendEmbed(text, 0x00cc00);
     }
@@ -365,7 +366,7 @@ function createSession(
     }
 
     if (code !== 0 && code !== null) {
-      await thread.send('Claude session ended unexpectedly. Use `/restart` to start a new session.');
+      await thread.send(friendlyError(`Session exited with code ${code}`));
     }
     sessions.delete(sessionId);
   });
