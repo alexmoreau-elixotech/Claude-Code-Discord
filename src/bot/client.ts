@@ -143,8 +143,9 @@ export function createClient(config: AppConfig): Client {
     lastUserMessages.set(sessionId, text);
     try {
       session.sendMessage(text);
-    } catch {
-      await thread.send(friendlyError('Failed to send message to Claude'));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send message to Claude';
+      await thread.send(friendlyError(msg));
     }
   });
 
@@ -342,7 +343,7 @@ function createSession(
       // Question was already shown with buttons — don't duplicate as embed
       handledAskUser = false;
     } else if (isError) {
-      await sendEmbed(friendlyError('Claude encountered an error while processing.'), 0xcc0000);
+      await sendEmbed(friendlyError(text || 'Claude encountered an error while processing.'), 0xcc0000);
     } else if (text) {
       await sendEmbed(text, 0x00cc00);
     }

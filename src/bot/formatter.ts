@@ -117,7 +117,7 @@ const ERROR_PATTERNS: Array<{ pattern: RegExp; friendly: string }> = [
   { pattern: /container is not running/i, friendly: "Claude's workspace isn't running. Use `/restart` to start it back up." },
   { pattern: /prompt is too long|context.*(overflow|window)/i, friendly: 'The conversation got too long — Claude is starting fresh and will retry your message.' },
   { pattern: /ECONNREFUSED|docker.*(socket|connect)|Cannot connect/i, friendly: "Can't connect to Docker. Make sure Docker Desktop is running on your computer." },
-  { pattern: /exited? with code [1-9]/i, friendly: 'Something went wrong. Try `/restart` to start a new conversation.' },
+  { pattern: /exited? with code [1-9][0-9]*/i, friendly: 'Something went wrong. Try `/restart` to start a new conversation.' },
   { pattern: /image.*not found|build.*fail/i, friendly: 'Setting up the workspace for the first time — this may take a few minutes.' },
   { pattern: /ENOMEM|out of memory|OOM/i, friendly: 'The project ran out of memory. Try restarting with `/restart`.' },
   { pattern: /permission denied|EACCES/i, friendly: "Claude doesn't have permission to do that. This shouldn't happen — try `/restart`." },
