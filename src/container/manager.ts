@@ -12,7 +12,7 @@ export interface ContainerInfo {
 
 export async function buildImage(): Promise<void> {
   const stream = await docker.buildImage(
-    { context: '.', src: ['Dockerfile.project'] },
+    { context: process.cwd(), src: ['Dockerfile.project'] },
     { t: IMAGE_NAME, dockerfile: 'Dockerfile.project' }
   );
   await new Promise<void>((resolve, reject) => {
