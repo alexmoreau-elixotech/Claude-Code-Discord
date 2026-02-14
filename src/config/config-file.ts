@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 
 const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), 'data');
@@ -33,7 +33,8 @@ export function isSetupComplete(): boolean {
   try {
     const config = readConfig();
     return config.setupComplete === true;
-  } catch {
+  } catch (err) {
+    console.error('Failed to read config file:', err);
     return false;
   }
 }
@@ -41,14 +42,20 @@ export function isSetupComplete(): boolean {
 export function readConfig(): SetupConfig {
   ensureDir();
   if (!existsSync(CONFIG_FILE)) {
-    throw new Error('Config file not found. Run setup first.');
+    throw new Error(`Config file not found at ${CONFIG_FILE}. Run setup first.`);
   }
-  return JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
+  const raw = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
+  if (!raw.discord?.token || !raw.discord?.guildId || typeof raw.setupComplete !== 'boolean') {
+    throw new Error(`Invalid config file structure at ${CONFIG_FILE}`);
+  }
+  return raw as SetupConfig;
 }
 
 export function writeConfig(config: SetupConfig): void {
   ensureDir();
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  const tempFile = `${CONFIG_FILE}.tmp`;
+  writeFileSync(tempFile, JSON.stringify(config, null, 2), 'utf-8');
+  renameSync(tempFile, CONFIG_FILE);
 }
 
 export function getConfigPath(): string {
