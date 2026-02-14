@@ -3,26 +3,32 @@
   "version": "1.0.0",
   "type": "module",
   "main": "dist/index.js",
-  "directories": {
-    "doc": "docs"
-  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "claude",
+    "discord",
+    "bot",
+    "ai",
+    "docker",
+    "claude-code"
+  ],
+  "author": "Alex Moreau",
+  "license": "MIT",
+  "description": "A Discord bot that gives you a team of Claude Code agents — each project gets its own channel, Docker container, and persistent workspace.",
   "dependencies": {
     "discord.js": "^14.25.1",
     "dockerode": "^4.0.9",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1"
   },
   "devDependencies": {
     "@types/dockerode": "^4.0.1",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
