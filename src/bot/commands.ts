@@ -14,6 +14,7 @@ import {
   deleteProject,
   getProject,
   getProjectByChannelId,
+  getNextPreviewPort,
 } from '../config/store.js';
 import {
   createContainer,
@@ -70,6 +71,17 @@ const commands = [
   new SlashCommandBuilder()
     .setName('export')
     .setDescription('Download your project as a zip file'),
+  new SlashCommandBuilder()
+    .setName('preview')
+    .setDescription('Preview your website in a browser')
+    .addStringOption((opt) =>
+      opt.setName('action')
+        .setDescription('Start or stop the preview')
+        .addChoices(
+          { name: 'start', value: 'start' },
+          { name: 'stop', value: 'stop' },
+        )
+    ),
 ];
 
 export async function registerCommands(config: AppConfig): Promise<void> {
@@ -122,6 +134,9 @@ export async function handleCommand(
       break;
     case 'export':
       await handleExport(interaction, config);
+      break;
+    case 'preview':
+      await handlePreview(interaction, config);
       break;
   }
 }
@@ -323,6 +338,7 @@ async function handleEnv(
       gitUserName: config.gitUserName,
       gitUserEmail: config.gitUserEmail,
       envVars,
+      previewPort: project.config.previewPort,
     });
 
     await interaction.editReply(`Set \`${key}\` and recreated container.`);
@@ -349,6 +365,7 @@ async function handleEnv(
       gitUserName: config.gitUserName,
       gitUserEmail: config.gitUserEmail,
       envVars: project.config.envVars,
+      previewPort: project.config.previewPort,
     });
 
     await interaction.editReply(`Removed \`${key}\` and recreated container.`);
@@ -477,4 +494,104 @@ async function handleHelp(interaction: ChatInputCommandInteraction): Promise<voi
     .setColor(0x7c3aed);
 
   await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handlePreview(
+  interaction: ChatInputCommandInteraction,
+  config: AppConfig
+): Promise<void> {
+  const project = getProjectByChannelId(interaction.channelId);
+  if (!project) {
+    await interaction.reply({ content: 'This channel is not a project channel.', ephemeral: true });
+    return;
+  }
+
+  const action = interaction.options.getString('action') || 'start';
+
+  if (action === 'stop') {
+    if (!project.config.previewPid) {
+      await interaction.reply({ content: 'No preview is running.', ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply();
+    await execInContainer(project.config.containerName, [
+      'bash', '-c', `kill ${project.config.previewPid} 2>/dev/null; true`,
+    ]);
+    project.config.previewPid = undefined;
+    saveProject(project.name, project.config);
+    await interaction.editReply('Preview stopped.');
+    return;
+  }
+
+  // Start preview
+  await interaction.deferReply();
+
+  try {
+    let port = project.config.previewPort;
+
+    // If no port assigned yet, assign one and recreate container with port mapping
+    if (!port) {
+      port = getNextPreviewPort();
+      project.config.previewPort = port;
+      saveProject(project.name, project.config);
+
+      // Kill session and recreate container with port mapping
+      removeSession(interaction.channelId);
+      await recreateContainer(project.name, {
+        claudeHome: config.claudeHome,
+        sshPath: config.sshPath,
+        gitconfigPath: config.gitconfigPath,
+        ghToken: config.ghToken,
+        claudeMdPath: config.claudeMdPath,
+        gitUserName: config.gitUserName,
+        gitUserEmail: config.gitUserEmail,
+        envVars: project.config.envVars,
+        previewPort: port,
+      });
+    }
+
+    // Kill any existing preview server
+    if (project.config.previewPid) {
+      await execInContainer(project.config.containerName, [
+        'bash', '-c', `kill ${project.config.previewPid} 2>/dev/null; true`,
+      ]);
+    }
+
+    // Start a static file server inside the container
+    const { exitCode: serveCheck } = await execInContainer(project.config.containerName, [
+      'bash', '-c', 'which npx',
+    ]);
+
+    let serverCmd: string;
+    if (serveCheck === 0) {
+      serverCmd = `npx --yes serve /workspace -l ${port} -s --no-clipboard`;
+    } else {
+      serverCmd = `python3 -m http.server ${port} --directory /workspace`;
+    }
+
+    // Start server in background and capture PID
+    const { stdout: pidOut } = await execInContainer(project.config.containerName, [
+      'bash', '-c', `${serverCmd} > /tmp/preview.log 2>&1 & echo $!`,
+    ]);
+    const pid = parseInt(pidOut.trim(), 10);
+    project.config.previewPid = pid;
+    saveProject(project.name, project.config);
+
+    // Wait briefly for server to start
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const embed = new EmbedBuilder()
+      .setTitle('Preview is live')
+      .setDescription(
+        `Your project is running at:\n**http://localhost:${port}**\n\n` +
+        'Use `/preview stop` to shut it down.'
+      )
+      .setColor(0x7c3aed);
+
+    await interaction.editReply({ embeds: [embed] });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    await interaction.editReply(`Failed to start preview: ${msg}`);
+  }
 }

@@ -61,3 +61,18 @@ export function deleteProject(name: string): boolean {
   }
   return false;
 }
+
+export function getNextPreviewPort(): number {
+  const data = readProjects();
+  const usedPorts = new Set<number>();
+  for (const project of Object.values(data.projects)) {
+    if (project.previewPort) {
+      usedPorts.add(project.previewPort);
+    }
+  }
+  let port = 4000;
+  while (usedPorts.has(port)) {
+    port++;
+  }
+  return port;
+}

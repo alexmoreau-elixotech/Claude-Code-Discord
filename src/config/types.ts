@@ -7,6 +7,8 @@ export interface ProjectConfig {
   volumeName: string;
   createdAt: string;
   envVars?: Record<string, string>;
+  previewPort?: number;
+  previewPid?: number;
 }
 
 export interface ProjectsData {

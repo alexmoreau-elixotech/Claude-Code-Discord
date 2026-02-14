@@ -32,6 +32,7 @@ export interface ContainerOptions {
   gitUserName?: string;
   gitUserEmail?: string;
   envVars?: Record<string, string>;
+  previewPort?: number;
 }
 
 export async function createContainer(
@@ -126,6 +127,15 @@ export async function createContainer(
     }
   }
 
+  // Port mapping for preview
+  const portBindings: Record<string, Array<{ HostPort: string }>> = {};
+  const exposedPorts: Record<string, Record<string, never>> = {};
+  if (mounts.previewPort) {
+    const containerPort = `${mounts.previewPort}/tcp`;
+    exposedPorts[containerPort] = {};
+    portBindings[containerPort] = [{ HostPort: String(mounts.previewPort) }];
+  }
+
   const container = await docker.createContainer({
     Image: IMAGE_NAME,
     name: containerName,
@@ -135,9 +145,11 @@ export async function createContainer(
     Cmd: ['/bin/bash', '-c', startupCmd],
     WorkingDir: '/workspace',
     Env: env.length > 0 ? env : undefined,
+    ExposedPorts: Object.keys(exposedPorts).length > 0 ? exposedPorts : undefined,
     HostConfig: {
       Binds: binds,
       RestartPolicy: { Name: 'unless-stopped' },
+      PortBindings: Object.keys(portBindings).length > 0 ? portBindings : undefined,
     },
   });
 
