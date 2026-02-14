@@ -1,3 +1,16 @@
+# Stage 1: Build TypeScript
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src/ ./src/
+RUN npm run build
+
+# Stage 2: Production image
 FROM node:20-slim
 
 # Install Docker CLI (to manage project containers via socket)
@@ -17,7 +30,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
 
-COPY dist/ ./dist/
+# Copy compiled output from builder stage
+COPY --from=builder /app/dist/ ./dist/
 COPY web/ ./web/
 COPY Dockerfile.project ./Dockerfile.project
 

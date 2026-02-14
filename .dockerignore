@@ -4,3 +4,7 @@ node_modules
 .env.*
 *.log
 data
+test-data
+tests
+docs
+installer

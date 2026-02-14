@@ -1,4 +1,5 @@
 node_modules/
 dist/
 .env
-data/projects.json
+data/
+test-data/
