@@ -1,0 +1,61 @@
+# ==========================================================================
+# Release workflow: Build NSIS installer and publish as a GitHub Release
+# ==========================================================================
+# Triggers on version tags (e.g., v1.0.0, v1.2.3-beta).
+# Builds the installer on Ubuntu using the NSIS cross-compiler,
+# then creates a GitHub Release with the .exe attached.
+# ==========================================================================
+
+name: Build Installer & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-installer:
+    name: Build NSIS Installer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install NSIS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+
+      - name: Build installer
+        working-directory: installer
+        run: makensis installer.nsi
+
+      - name: Verify installer was created
+        run: |
+          ls -lh installer/ClaudeCodeAssistant-Setup.exe
+          echo "Installer size: $(du -h installer/ClaudeCodeAssistant-Setup.exe | cut -f1)"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Claude Code Assistant ${{ github.ref_name }}"
+          body: |
+            ## Claude Code Assistant ${{ github.ref_name }}
+
+            ### Installation
+            1. Download `ClaudeCodeAssistant-Setup.exe` below
+            2. Run the installer
+            3. Make sure Docker Desktop is installed and running
+            4. Launch Claude Code Assistant from the desktop shortcut
+
+            ### Requirements
+            - Windows 10 or later
+            - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: installer/ClaudeCodeAssistant-Setup.exe
+          fail_on_unmatched_files: true
