@@ -6,6 +6,7 @@ import {
   ChatInputCommandInteraction,
   ChannelType,
   TextChannel,
+  EmbedBuilder,
 } from 'discord.js';
 import {
   saveProject,
@@ -59,6 +60,9 @@ const commands = [
       sub.setName('list')
         .setDescription('List all environment variables for this project')
     ),
+  new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('Show what you can do with Claude and example prompts'),
 ];
 
 export async function registerCommands(config: AppConfig): Promise<void> {
@@ -105,6 +109,9 @@ export async function handleCommand(
       break;
     case 'env':
       await handleEnv(interaction, config);
+      break;
+    case 'help':
+      await handleHelp(interaction);
       break;
   }
 }
@@ -161,6 +168,21 @@ async function handleNewProject(
       volumeName,
       createdAt: new Date().toISOString(),
     });
+
+    // Send welcome message in the new channel
+    const welcomeEmbed = new EmbedBuilder()
+      .setTitle(`Welcome to ${name}!`)
+      .setDescription(
+        "I'm Claude, your coding assistant. Tell me what you'd like to build and I'll get started.\n\n" +
+        '**Try saying something like:**\n' +
+        '\u2022 "Build me a simple landing page"\n' +
+        '\u2022 "Create a Python script that renames files"\n' +
+        '\u2022 "Clone [repo URL] and set it up"\n\n' +
+        'Each message creates a thread so your channel stays organized. Type `/help` for more examples.'
+      )
+      .setColor(0x7c3aed);
+
+    await (channel as TextChannel).send({ embeds: [welcomeEmbed] });
 
     await interaction.editReply(
       `Project **${name}** created!\n` +
@@ -321,4 +343,48 @@ async function handleEnv(
 
     await interaction.editReply(`Removed \`${key}\` and recreated container.`);
   }
+}
+
+async function handleHelp(interaction: ChatInputCommandInteraction): Promise<void> {
+  const embed = new EmbedBuilder()
+    .setTitle('Claude Code Assistant')
+    .setDescription('Chat with Claude to build, fix, and manage code projects. Here are some things you can try:')
+    .addFields(
+      {
+        name: 'Build something new',
+        value: [
+          '\u2022 "Build me a personal portfolio website"',
+          '\u2022 "Create a to-do app with a nice UI"',
+          '\u2022 "Make a Discord bot that posts daily quotes"',
+        ].join('\n'),
+      },
+      {
+        name: 'Work with existing code',
+        value: [
+          '\u2022 "Clone https://github.com/user/repo and explain what it does"',
+          '\u2022 "Fix the bug in index.html"',
+          '\u2022 "Add a dark mode toggle to the website"',
+        ].join('\n'),
+      },
+      {
+        name: 'Manage your project',
+        value: [
+          '\u2022 `/export` \u2014 Download your project as a zip file',
+          '\u2022 `/preview` \u2014 See your website in a browser',
+          '\u2022 `/status` \u2014 Check if your project is running',
+          '\u2022 `/restart` \u2014 Start a fresh conversation',
+        ].join('\n'),
+      },
+      {
+        name: 'Tips',
+        value: [
+          '\u2022 Each message creates a thread \u2014 reply in the thread to continue the conversation',
+          '\u2022 You can attach files \u2014 Claude will read them in your project',
+          '\u2022 Be specific about what you want \u2014 Claude works best with clear instructions',
+        ].join('\n'),
+      },
+    )
+    .setColor(0x7c3aed);
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
 }
