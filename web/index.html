@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Code Assistant</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ===== SETUP WIZARD ===== -->
+    <div id="wizard" class="hidden">
+      <div class="wizard-container">
+        <header class="wizard-header">
+          <h1>Claude Code Assistant</h1>
+          <p class="subtitle">Setup Wizard</p>
+        </header>
+
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+          <div class="step-item" data-step="1">
+            <div class="step-circle">1</div>
+            <span class="step-label">Prerequisites</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" data-step="2">
+            <div class="step-circle">2</div>
+            <span class="step-label">Bot Token</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" data-step="3">
+            <div class="step-circle">3</div>
+            <span class="step-label">Server</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" data-step="4">
+            <div class="step-circle">4</div>
+            <span class="step-label">Settings</span>
+          </div>
+          <div class="step-line"></div>
+          <div class="step-item" data-step="5">
+            <div class="step-circle">5</div>
+            <span class="step-label">Launch</span>
+          </div>
+        </div>
+
+        <!-- Step Panels -->
+        <div class="step-panels">
+
+          <!-- Step 1: Prerequisites -->
+          <div class="step-panel" data-panel="1">
+            <div class="card">
+              <h2>Prerequisites Check</h2>
+              <p class="card-description">Verifying your environment is ready.</p>
+
+              <div class="check-list">
+                <div class="check-item success">
+                  <span class="check-icon">&#10003;</span>
+                  <div>
+                    <strong>Docker</strong>
+                    <p>Container runtime is available.</p>
+                  </div>
+                </div>
+                <div class="check-item success">
+                  <span class="check-icon">&#10003;</span>
+                  <div>
+                    <strong>Application Running</strong>
+                    <p>Web server is responding.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="step-actions">
+                <button class="btn btn-primary" onclick="Wizard.nextStep()">Next</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Discord Bot Token -->
+          <div class="step-panel" data-panel="2">
+            <div class="card">
+              <h2>Create a Discord Bot</h2>
+              <p class="card-description">Follow these steps to create your bot and get a token.</p>
+
+              <ol class="instructions">
+                <li>Open the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a></li>
+                <li>Click <strong>"New Application"</strong> and give it a name</li>
+                <li>Go to the <strong>"Bot"</strong> section in the sidebar</li>
+                <li>Click <strong>"Reset Token"</strong> and copy it</li>
+                <li>Under <strong>"Privileged Gateway Intents"</strong>, enable <strong>"Message Content Intent"</strong></li>
+              </ol>
+
+              <div class="form-group">
+                <label for="bot-token">Bot Token</label>
+                <div class="input-row">
+                  <input type="password" id="bot-token" placeholder="Paste your bot token here" autocomplete="off">
+                  <button class="btn btn-secondary" id="validate-token-btn" onclick="Wizard.validateToken()">Validate</button>
+                </div>
+                <div id="token-status" class="status-message hidden"></div>
+              </div>
+
+              <div id="invite-section" class="hidden">
+                <div class="invite-box">
+                  <p>Bot validated! Now invite it to your Discord server:</p>
+                  <a id="invite-link" href="#" target="_blank" rel="noopener" class="btn btn-accent">Invite Bot to Server</a>
+                </div>
+              </div>
+
+              <div class="step-actions">
+                <button class="btn btn-ghost" onclick="Wizard.prevStep()">Back</button>
+                <button class="btn btn-primary" id="step2-next" onclick="Wizard.nextStep()" disabled>Next</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Select Server -->
+          <div class="step-panel" data-panel="3">
+            <div class="card">
+              <h2>Select Server</h2>
+              <p class="card-description">Choose which Discord server the bot should operate in.</p>
+
+              <div id="guilds-loading" class="loading-inline">
+                <div class="spinner"></div>
+                <span>Loading servers...</span>
+              </div>
+
+              <div id="guilds-list" class="hidden">
+                <div class="form-group">
+                  <label for="guild-select">Server</label>
+                  <select id="guild-select" onchange="Wizard.onGuildSelected()">
+                    <option value="">Select a server...</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="no-guilds" class="hidden">
+                <div class="alert alert-warning">
+                  <p>Bot hasn't been added to any server yet.</p>
+                  <a id="invite-link-alt" href="#" target="_blank" rel="noopener" class="btn btn-accent btn-sm">Invite Bot to Server</a>
+                  <button class="btn btn-ghost btn-sm" onclick="Wizard.refreshGuilds()">Refresh</button>
+                </div>
+              </div>
+
+              <div id="permissions-section" class="hidden">
+                <div class="form-group">
+                  <label>Who should be able to use the bot?</label>
+                  <div class="radio-group">
+                    <label class="radio-label">
+                      <input type="radio" name="perm-mode" value="role" onchange="Wizard.onPermModeChange()">
+                      <span>Everyone with a specific role</span>
+                    </label>
+                    <label class="radio-label">
+                      <input type="radio" name="perm-mode" value="user" checked onchange="Wizard.onPermModeChange()">
+                      <span>Only me (by User ID)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div id="role-picker" class="form-group hidden">
+                  <label for="role-select">Role</label>
+                  <select id="role-select">
+                    <option value="">Select a role...</option>
+                  </select>
+                </div>
+
+                <div id="user-id-section" class="form-group">
+                  <label for="user-id-input">Your Discord User ID</label>
+                  <input type="text" id="user-id-input" placeholder="e.g. 123456789012345678">
+                  <p class="hint">Right-click your name in Discord &rarr; Copy User ID</p>
+                </div>
+              </div>
+
+              <div class="step-actions">
+                <button class="btn btn-ghost" onclick="Wizard.prevStep()">Back</button>
+                <button class="btn btn-primary" id="step3-next" onclick="Wizard.nextStep()" disabled>Next</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Optional Settings -->
+          <div class="step-panel" data-panel="4">
+            <div class="card">
+              <h2>Optional Settings</h2>
+              <p class="card-description">Configure additional integrations. You can skip these and set them up later.</p>
+
+              <!-- GitHub Token -->
+              <div class="collapsible">
+                <button class="collapsible-header" onclick="Wizard.toggleCollapsible(this)">
+                  <span class="collapsible-arrow">&#9654;</span>
+                  <span>GitHub Personal Access Token</span>
+                  <span class="badge badge-optional">Optional</span>
+                </button>
+                <div class="collapsible-body">
+                  <div class="form-group">
+                    <label for="github-token">Token</label>
+                    <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+                    <p class="hint"><a href="https://github.com/settings/tokens/new" target="_blank" rel="noopener">Create a token on GitHub</a> &mdash; scopes needed: <code>repo</code></p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Git Identity -->
+              <div class="collapsible">
+                <button class="collapsible-header" onclick="Wizard.toggleCollapsible(this)">
+                  <span class="collapsible-arrow">&#9654;</span>
+                  <span>Git Identity</span>
+                  <span class="badge badge-optional">Optional</span>
+                </button>
+                <div class="collapsible-body">
+                  <div class="form-group">
+                    <label for="git-name">Name</label>
+                    <input type="text" id="git-name" placeholder="Your Name">
+                  </div>
+                  <div class="form-group">
+                    <label for="git-email">Email</label>
+                    <input type="email" id="git-email" placeholder="you@example.com">
+                  </div>
+                </div>
+              </div>
+
+              <!-- CLAUDE.md -->
+              <div class="collapsible">
+                <button class="collapsible-header" onclick="Wizard.toggleCollapsible(this)">
+                  <span class="collapsible-arrow">&#9654;</span>
+                  <span>CLAUDE.md Base Instructions</span>
+                  <span class="badge badge-optional">Optional</span>
+                </button>
+                <div class="collapsible-body">
+                  <div class="form-group">
+                    <label for="claude-md">Instructions</label>
+                    <textarea id="claude-md" rows="6" placeholder="Custom instructions for Claude Code sessions..."></textarea>
+                    <p class="hint">These instructions are prepended to every Claude Code session.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="step-actions">
+                <button class="btn btn-ghost" onclick="Wizard.prevStep()">Back</button>
+                <button class="btn btn-primary" onclick="Wizard.nextStep()">Next</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 5: Review & Launch -->
+          <div class="step-panel" data-panel="5">
+            <div class="card">
+              <h2>Review &amp; Launch</h2>
+              <p class="card-description">Confirm your configuration before starting the bot.</p>
+
+              <div id="review-summary" class="review-table"></div>
+
+              <div id="launch-status" class="hidden">
+                <div class="launch-progress">
+                  <div class="spinner"></div>
+                  <span id="launch-message">Building Docker image...</span>
+                </div>
+              </div>
+
+              <div id="launch-success" class="hidden">
+                <div class="success-box">
+                  <div class="success-icon">&#10003;</div>
+                  <h3>Claude Code Assistant is running!</h3>
+                  <p>Head over to your Discord server to start using it.</p>
+                  <a id="discord-server-link" href="#" target="_blank" rel="noopener" class="btn btn-accent">Open Discord Server</a>
+                </div>
+              </div>
+
+              <div id="launch-error" class="hidden">
+                <div class="alert alert-error">
+                  <p id="launch-error-message"></p>
+                </div>
+              </div>
+
+              <div class="step-actions" id="launch-actions">
+                <button class="btn btn-ghost" onclick="Wizard.prevStep()">Back</button>
+                <button class="btn btn-primary btn-launch" id="launch-btn" onclick="Wizard.launch()">Launch</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== DASHBOARD ===== -->
+    <div id="dashboard" class="hidden">
+      <div class="dashboard-container">
+        <header class="dashboard-header">
+          <div class="header-left">
+            <h1>Claude Code Assistant</h1>
+            <span class="badge badge-online">Online</span>
+          </div>
+        </header>
+
+        <!-- Projects Section -->
+        <section class="dashboard-section">
+          <h2>Projects</h2>
+          <div id="projects-list">
+            <div class="loading-inline">
+              <div class="spinner"></div>
+              <span>Loading projects...</span>
+            </div>
+          </div>
+          <div id="no-projects" class="hidden">
+            <div class="empty-state">
+              <p>No projects yet.</p>
+              <p class="hint">Use <code>/new-project</code> in Discord to create one.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section class="dashboard-section">
+          <h2>Settings</h2>
+          <div id="config-display">
+            <div class="loading-inline">
+              <div class="spinner"></div>
+              <span>Loading configuration...</span>
+            </div>
+          </div>
+          <div class="section-actions">
+            <button class="btn btn-secondary" onclick="Dashboard.reconfigure()">Reconfigure</button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- Loading screen -->
+    <div id="loading-screen">
+      <div class="loading-container">
+        <div class="spinner spinner-lg"></div>
+        <p>Loading...</p>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
