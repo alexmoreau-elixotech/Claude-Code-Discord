@@ -18,7 +18,7 @@ async function main(): Promise<void> {
   const hasImage = await imageExists();
   if (!hasImage) {
     console.log('Building Docker image (first run)...');
-    await buildImage(process.cwd());
+    await buildImage();
     console.log('Docker image built.');
   }
 

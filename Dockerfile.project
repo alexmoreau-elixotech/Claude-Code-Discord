@@ -21,11 +21,22 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
 
+# Install Playwright system dependencies for headless Chrome testing
+RUN npx playwright install-deps chromium
+
+# Pre-install MCP server packages globally so they're available instantly
+RUN npm install -g @anthropic-ai/claude-code-mcp-server-playwright \
+    @modelcontextprotocol/server-github
+
 # Create a non-root user
 RUN useradd -m -s /bin/bash user \
     && echo "user ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 USER user
+
+# Install Playwright browsers as the non-root user
+RUN npx playwright install chromium
+
 WORKDIR /workspace
 
 # Keep container alive
