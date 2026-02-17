@@ -29,6 +29,7 @@ echo  Opening http://localhost:3456 ...
 echo.
 timeout /t 3 >nul
 start http://localhost:3456
-echo  To stop: docker compose down
+echo  To stop: press Ctrl+C, then run: docker compose down
+echo  Streaming logs...
 echo.
-pause
+docker compose logs -f

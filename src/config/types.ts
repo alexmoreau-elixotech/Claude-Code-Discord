@@ -72,7 +72,7 @@ export function loadAppConfigFromFile(config: SetupConfig): AppConfig {
     guildId: config.discord.guildId,
     userId: config.discord.userId,
     roleId: config.discord.roleId,
-    claudeHome: '/home/user/.claude',
+    claudeHome: config.claudeHome,
     ghToken: config.github?.token,
     gitUserName: config.git?.userName,
     gitUserEmail: config.git?.userEmail,

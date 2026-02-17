@@ -33,6 +33,7 @@ export interface ContainerOptions {
   gitUserEmail?: string;
   envVars?: Record<string, string>;
   previewPort?: number;
+  previewPortRangeSize?: number;
 }
 
 export async function createContainer(
@@ -77,6 +78,7 @@ export async function createContainer(
   // Build startup script that fixes permissions then sleeps
   const startupParts = [
     'sudo chown user:user /workspace',
+    'sudo chown -R user:user /home/user/.claude',
   ];
   if (mounts.sshPath) {
     startupParts.push(
@@ -127,13 +129,17 @@ export async function createContainer(
     }
   }
 
-  // Port mapping for preview
+  // Port mapping for preview — map a range of ports
   const portBindings: Record<string, Array<{ HostPort: string }>> = {};
   const exposedPorts: Record<string, Record<string, never>> = {};
   if (mounts.previewPort) {
-    const containerPort = `${mounts.previewPort}/tcp`;
-    exposedPorts[containerPort] = {};
-    portBindings[containerPort] = [{ HostPort: String(mounts.previewPort) }];
+    const rangeSize = mounts.previewPortRangeSize || 5;
+    for (let i = 0; i < rangeSize; i++) {
+      const p: number = mounts.previewPort + i;
+      const containerPort = `${p}/tcp`;
+      exposedPorts[containerPort] = {};
+      portBindings[containerPort] = [{ HostPort: String(p) }];
+    }
   }
 
   const container = await docker.createContainer({

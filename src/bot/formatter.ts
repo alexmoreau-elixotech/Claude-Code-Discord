@@ -106,6 +106,47 @@ export function formatErrorResponse(error: string): FormattedResponse {
   return { content, files };
 }
 
+/**
+ * Split text into chunks that fit within maxLen, breaking at paragraph
+ * boundaries (\n\n). Falls back to line breaks, then hard-cuts.
+ */
+export function splitIntoChunks(text: string, maxLen: number): string[] {
+  if (text.length <= maxLen) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > 0) {
+    if (remaining.length <= maxLen) {
+      chunks.push(remaining);
+      break;
+    }
+
+    // Try to split at a paragraph break (\n\n) within limit
+    let splitAt = remaining.lastIndexOf('\n\n', maxLen);
+    if (splitAt > maxLen * 0.3) {
+      // Found a good paragraph break — include the first \n as part of this chunk
+      chunks.push(remaining.slice(0, splitAt).trimEnd());
+      remaining = remaining.slice(splitAt + 2).trimStart();
+      continue;
+    }
+
+    // Fall back to line break
+    splitAt = remaining.lastIndexOf('\n', maxLen);
+    if (splitAt > maxLen * 0.3) {
+      chunks.push(remaining.slice(0, splitAt).trimEnd());
+      remaining = remaining.slice(splitAt + 1).trimStart();
+      continue;
+    }
+
+    // Hard cut at maxLen
+    chunks.push(remaining.slice(0, maxLen));
+    remaining = remaining.slice(maxLen);
+  }
+
+  return chunks.filter((c) => c.trim().length > 0);
+}
+
 export function containsQuestion(text: string): boolean {
   // Check if the text ends with a question (last non-empty line ends with ?)
   const lines = text.trim().split('\n');

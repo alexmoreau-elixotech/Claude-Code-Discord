@@ -17,6 +17,7 @@ import { ensureContainerRunning, writeFileToContainer } from '../container/manag
 import { ClaudeSession } from '../bridge/session.js';
 import {
   formatTextResponse,
+  splitIntoChunks,
   containsQuestion,
   friendlyError,
 } from './formatter.js';
@@ -170,19 +171,18 @@ function createSession(
   let questionBuffer = '';
   let questionTimeout: NodeJS.Timeout | null = null;
   let handledAskUser = false;
+  let questionFlushed = false;
 
   const sendEmbed = async (text: string, color: number) => {
     if (!text.trim()) return;
-    if (text.length <= 4096) {
-      const embed = new EmbedBuilder().setDescription(text).setColor(color).setTimestamp();
-      await thread.send({ embeds: [embed] });
-    } else {
-      const formatted = formatTextResponse(text, '');
+    const chunks = splitIntoChunks(text, 4096);
+    for (let i = 0; i < chunks.length; i++) {
       const embed = new EmbedBuilder()
-        .setDescription(text.substring(0, 4093) + '...')
-        .setColor(color)
-        .setTimestamp();
-      await thread.send({ embeds: [embed], files: formatted.files });
+        .setDescription(chunks[i])
+        .setColor(color);
+      // Only add timestamp to last chunk
+      if (i === chunks.length - 1) embed.setTimestamp();
+      await thread.send({ embeds: [embed] });
     }
   };
 
@@ -197,6 +197,7 @@ function createSession(
     if (!questionBuffer.trim()) return;
     const text = questionBuffer;
     questionBuffer = '';
+    questionFlushed = true;
     await sendQuestion(text);
   };
 
@@ -342,6 +343,9 @@ function createSession(
     if (handledAskUser) {
       // Question was already shown with buttons — don't duplicate as embed
       handledAskUser = false;
+    } else if (questionFlushed) {
+      // Question was already sent as a @mention — don't duplicate as embed
+      questionFlushed = false;
     } else if (isError) {
       await sendEmbed(friendlyError(text || 'Claude encountered an error while processing.'), 0xcc0000);
     } else if (text) {

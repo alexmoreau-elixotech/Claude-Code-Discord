@@ -178,11 +178,26 @@
             </div>
           </div>
 
-          <!-- Step 4: Optional Settings -->
+          <!-- Step 4: Settings -->
           <div class="step-panel" data-panel="4">
             <div class="card">
-              <h2>Optional Settings</h2>
-              <p class="card-description">Configure additional integrations. You can skip these and set them up later.</p>
+              <h2>Settings</h2>
+              <p class="card-description">Configure Claude authentication and optional integrations.</p>
+
+              <!-- Claude Home Directory (required) -->
+              <div class="form-group">
+                <label for="claude-home">Claude Home Directory <span class="required">*</span></label>
+                <input type="text" id="claude-home" placeholder="C:\Users\YourName\.claude" autocomplete="off">
+                <p class="hint">
+                  The path to your <code>.claude</code> folder on this machine (the Docker host).
+                  This contains your Claude login credentials.
+                  Typically <code>C:\Users\YourName\.claude</code> on Windows or <code>~/.claude</code> on Mac/Linux.
+                  You must be logged in to Claude Code first (<code>claude login</code>).
+                </p>
+                <div id="claude-home-status" class="status-message hidden"></div>
+              </div>
+
+              <hr class="divider">
 
               <!-- GitHub Token -->
               <div class="collapsible">

@@ -844,6 +844,17 @@ select {
   margin-top: 0.5rem;
 }
 
+.required {
+  color: var(--accent);
+  font-weight: bold;
+}
+
+hr.divider {
+  border: none;
+  border-top: 1px solid var(--bg-hover);
+  margin: 1.5rem 0;
+}
+
 /* =========================================================
    RESPONSIVE
    ========================================================= */

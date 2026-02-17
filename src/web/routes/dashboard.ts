@@ -52,6 +52,7 @@ export function dashboardRoutes(): Router {
         userId: config.discord.userId,
         roleId: config.discord.roleId,
       },
+      claudeHome: config.claudeHome,
       github: {
         hasToken: !!config.github?.token,
       },

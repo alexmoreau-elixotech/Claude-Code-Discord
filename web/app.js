@@ -72,6 +72,7 @@
     userId: '',
 
     // Step 4
+    claudeHome: '',
     githubToken: '',
     gitName: '',
     gitEmail: '',
@@ -376,6 +377,7 @@
 
     buildReview: function () {
       // Collect step 4 values
+      state.claudeHome = $('#claude-home').value.trim();
       state.githubToken = $('#github-token').value.trim();
       state.gitName = $('#git-name').value.trim();
       state.gitEmail = $('#git-email').value.trim();
@@ -402,6 +404,7 @@
         rows.push({ label: 'Role', value: roleName || 'Not set' });
       }
 
+      rows.push({ label: 'Claude Home', value: state.claudeHome || 'Not set' });
       rows.push({ label: 'GitHub Token', value: state.githubToken ? redactToken(state.githubToken) : 'Not set', muted: !state.githubToken });
       rows.push({ label: 'Git Name', value: state.gitName || 'Not set', muted: !state.gitName });
       rows.push({ label: 'Git Email', value: state.gitEmail || 'Not set', muted: !state.gitEmail });
@@ -446,11 +449,16 @@
 
         var mode = document.querySelector('input[name="perm-mode"]:checked').value;
 
+        if (!state.claudeHome) {
+          throw new Error('Claude home directory is required. Go back to Step 4.');
+        }
+
         var config = {
           discord: {
             token: state.token,
             guildId: state.selectedGuildId,
           },
+          claudeHome: state.claudeHome,
           setupComplete: true,
         };
 
@@ -599,6 +607,7 @@
         var items = [
           { label: 'Discord Token', value: data.discord && data.discord.hasToken ? 'Configured' : 'Not set' },
           { label: 'Guild ID', value: data.discord ? data.discord.guildId : 'Not set' },
+          { label: 'Claude Home', value: data.claudeHome || 'Not set' },
           { label: 'User ID', value: data.discord && data.discord.userId ? data.discord.userId : 'Not set', muted: !(data.discord && data.discord.userId) },
           { label: 'Role ID', value: data.discord && data.discord.roleId ? data.discord.roleId : 'Not set', muted: !(data.discord && data.discord.roleId) },
           { label: 'GitHub Token', value: data.github && data.github.hasToken ? 'Configured' : 'Not set', muted: !(data.github && data.github.hasToken) },

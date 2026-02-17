@@ -15,6 +15,7 @@ import {
   getProject,
   getProjectByChannelId,
   getNextPreviewPort,
+  PREVIEW_PORT_RANGE_SIZE,
 } from '../config/store.js';
 import {
   createContainer,
@@ -519,7 +520,7 @@ async function handlePreview(
 
     await interaction.deferReply();
     await execInContainer(project.config.containerName, [
-      'bash', '-c', `kill ${project.config.previewPid} 2>/dev/null; true`,
+      'bash', '-c', `kill ${project.config.previewPid} 2>/dev/null; pkill -P ${project.config.previewPid} 2>/dev/null; true`,
     ]);
     project.config.previewPid = undefined;
     saveProject(project.name, project.config);
@@ -551,31 +552,23 @@ async function handlePreview(
         gitUserEmail: config.gitUserEmail,
         envVars: project.config.envVars,
         previewPort: port,
+        previewPortRangeSize: PREVIEW_PORT_RANGE_SIZE,
       });
     }
 
-    // Kill any existing preview server
+    // Kill any existing preview process tree
     if (project.config.previewPid) {
       await execInContainer(project.config.containerName, [
-        'bash', '-c', `kill ${project.config.previewPid} 2>/dev/null; true`,
+        'bash', '-c', `kill ${project.config.previewPid} 2>/dev/null; pkill -P ${project.config.previewPid} 2>/dev/null; true`,
       ]);
     }
 
-    // Start a static file server inside the container
-    const { exitCode: serveCheck } = await execInContainer(project.config.containerName, [
-      'bash', '-c', 'which npx',
-    ]);
-
-    let serverCmd: string;
-    if (serveCheck === 0) {
-      serverCmd = `npx --yes serve /workspace -l ${port} -s --no-clipboard`;
-    } else {
-      serverCmd = `python3 -m http.server ${port} --directory /workspace`;
-    }
+    // Detect project type and pick the right start command
+    const serverCmd = await detectStartCommand(project.config.containerName, port);
 
     // Start server in background and capture PID
     const { stdout: pidOut } = await execInContainer(project.config.containerName, [
-      'bash', '-c', `${serverCmd} > /tmp/preview.log 2>&1 & echo $!`,
+      'bash', '-c', `cd /workspace && PORT=${port} ${serverCmd} > /tmp/preview.log 2>&1 & echo $!`,
     ]);
     const pid = parseInt(pidOut.trim(), 10);
     if (!Number.isInteger(pid) || pid <= 0) {
@@ -585,12 +578,28 @@ async function handlePreview(
     saveProject(project.name, project.config);
 
     // Wait briefly for server to start
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 3000));
 
+    // Check if the process is still running
+    const { stdout: checkOut } = await execInContainer(project.config.containerName, [
+      'bash', '-c', `kill -0 ${pid} 2>/dev/null && echo running || echo stopped`,
+    ]);
+
+    if (checkOut.trim() === 'stopped') {
+      // Read the log to show what went wrong
+      const { stdout: logOut } = await execInContainer(project.config.containerName, [
+        'bash', '-c', 'tail -20 /tmp/preview.log 2>/dev/null || echo "No log output"',
+      ]);
+      throw new Error(`Server exited immediately.\n\`\`\`\n${logOut.trim()}\n\`\`\``);
+    }
+
+    const lastPort = port + PREVIEW_PORT_RANGE_SIZE - 1;
     const embed = new EmbedBuilder()
       .setTitle('Preview is live')
       .setDescription(
         `Your project is running at:\n**http://localhost:${port}**\n\n` +
+        `Ports **${port}–${lastPort}** are mapped for multi-service projects.\n` +
+        `Command: \`${serverCmd}\`\n` +
         'Use `/preview stop` to shut it down.'
       )
       .setColor(0x7c3aed);
@@ -600,4 +609,125 @@ async function handlePreview(
     const msg = err instanceof Error ? err.message : 'Unknown error';
     await interaction.editReply(`Failed to start preview: ${msg}`);
   }
+}
+
+/**
+ * Detect the project type and return the appropriate start command.
+ * Checks package.json scripts, Python files, etc.
+ */
+async function detectStartCommand(containerName: string, port: number): Promise<string> {
+  // Check for package.json
+  const { exitCode: hasPkgJson, stdout: pkgJsonRaw } = await execInContainer(containerName, [
+    'bash', '-c', 'cat /workspace/package.json 2>/dev/null',
+  ]);
+
+  if (hasPkgJson === 0 && pkgJsonRaw.trim()) {
+    try {
+      const pkg = JSON.parse(pkgJsonRaw);
+      const scripts = pkg.scripts || {};
+
+      // Install deps if node_modules doesn't exist
+      const { exitCode: hasNodeModules } = await execInContainer(containerName, [
+        'bash', '-c', 'test -d /workspace/node_modules',
+      ]);
+      if (hasNodeModules !== 0) {
+        await execInContainer(containerName, [
+          'bash', '-c', 'cd /workspace && npm install 2>&1',
+        ]);
+      }
+
+      // --- Monorepo detection ---
+      const devScript = scripts.dev || '';
+      const usesMonorepoTool =
+        devScript.includes('turbo') ||
+        devScript.includes('concurrently') ||
+        devScript.includes('nx ') ||
+        devScript.includes('lerna');
+
+      const { exitCode: hasTurbo } = await execInContainer(containerName, ['test', '-f', '/workspace/turbo.json']);
+      const { exitCode: hasNx } = await execInContainer(containerName, ['test', '-f', '/workspace/nx.json']);
+      const { exitCode: hasLerna } = await execInContainer(containerName, ['test', '-f', '/workspace/lerna.json']);
+      const isMonorepo = !!pkg.workspaces || usesMonorepoTool || hasTurbo === 0 || hasNx === 0 || hasLerna === 0;
+
+      if (isMonorepo) {
+        // Root dev script is the best bet — it usually orchestrates all services
+        if (scripts.dev) {
+          return 'npm run dev';
+        }
+        if (hasTurbo === 0) return 'npx turbo run dev';
+        if (hasNx === 0) return 'npx nx run-many --target=serve --parallel';
+        if (hasLerna === 0) return 'npx lerna run dev --parallel';
+        // workspaces but no tool — try start
+        if (scripts.start) return 'npm start';
+      }
+
+      // --- Single-project detection ---
+      if (scripts.dev) {
+        return `npm run dev -- --port ${port}`;
+      }
+      if (scripts.start) {
+        return 'npm start';
+      }
+      if (scripts.build) {
+        // Build first, then serve the output
+        await execInContainer(containerName, [
+          'bash', '-c', 'cd /workspace && npm run build 2>&1',
+        ]);
+        // Common build output directories
+        const { exitCode: hasDist } = await execInContainer(containerName, ['test', '-d', '/workspace/dist']);
+        const { exitCode: hasBuild } = await execInContainer(containerName, ['test', '-d', '/workspace/build']);
+        const { exitCode: hasOut } = await execInContainer(containerName, ['test', '-d', '/workspace/out']);
+        const dir = hasDist === 0 ? 'dist' : hasBuild === 0 ? 'build' : hasOut === 0 ? 'out' : '.';
+        return `npx --yes serve /workspace/${dir} -l ${port} -s --no-clipboard`;
+      }
+    } catch {
+      // Failed to parse package.json — fall through
+    }
+  }
+
+  // Check for Python projects
+  const { exitCode: hasManagePy } = await execInContainer(containerName, [
+    'test', '-f', '/workspace/manage.py',
+  ]);
+  if (hasManagePy === 0) {
+    return `python3 manage.py runserver 0.0.0.0:${port}`;
+  }
+
+  const { exitCode: hasAppPy } = await execInContainer(containerName, [
+    'bash', '-c', 'test -f /workspace/app.py || test -f /workspace/main.py',
+  ]);
+  if (hasAppPy === 0) {
+    // Check if Flask
+    const { stdout: grepFlask } = await execInContainer(containerName, [
+      'bash', '-c', 'grep -l "Flask\\|flask" /workspace/app.py /workspace/main.py 2>/dev/null || true',
+    ]);
+    if (grepFlask.trim()) {
+      const entryFile = grepFlask.trim().split('\n')[0].replace('/workspace/', '');
+      return `flask --app ${entryFile} run --host 0.0.0.0 --port ${port}`;
+    }
+    // Generic Python
+    const entryFile = (await execInContainer(containerName, ['test', '-f', '/workspace/app.py'])).exitCode === 0
+      ? 'app.py' : 'main.py';
+    return `python3 ${entryFile}`;
+  }
+
+  // Check for docker-compose in workspace
+  const { exitCode: hasCompose } = await execInContainer(containerName, [
+    'bash', '-c', 'test -f /workspace/docker-compose.yml || test -f /workspace/docker-compose.yaml || test -f /workspace/compose.yml || test -f /workspace/compose.yaml',
+  ]);
+  if (hasCompose === 0) {
+    // Can't run docker-compose inside the container easily — serve static instead
+    // but let the user know
+  }
+
+  // Check for index.html (static site)
+  const { exitCode: hasIndexHtml } = await execInContainer(containerName, [
+    'test', '-f', '/workspace/index.html',
+  ]);
+  if (hasIndexHtml === 0) {
+    return `npx --yes serve /workspace -l ${port} -s --no-clipboard`;
+  }
+
+  // Fallback: static file server
+  return `npx --yes serve /workspace -l ${port} -s --no-clipboard`;
 }

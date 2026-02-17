@@ -62,17 +62,20 @@ export function deleteProject(name: string): boolean {
   return false;
 }
 
+export const PREVIEW_PORT_RANGE_SIZE = 5;
+
 export function getNextPreviewPort(): number {
   const data = readProjects();
-  const usedPorts = new Set<number>();
+  const usedBases = new Set<number>();
   for (const project of Object.values(data.projects)) {
     if (project.previewPort) {
-      usedPorts.add(project.previewPort);
+      usedBases.add(project.previewPort);
     }
   }
+  // Allocate in blocks of PREVIEW_PORT_RANGE_SIZE starting at 4000
   let port = 4000;
-  while (usedPorts.has(port)) {
-    port++;
+  while (usedBases.has(port)) {
+    port += PREVIEW_PORT_RANGE_SIZE;
   }
   return port;
 }

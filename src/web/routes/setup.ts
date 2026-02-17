@@ -109,6 +109,10 @@ export function setupRoutes(): Router {
       res.status(400).json({ error: 'Must set userId or roleId (or both)' });
       return;
     }
+    if (!config.claudeHome) {
+      res.status(400).json({ error: 'Claude home directory path is required' });
+      return;
+    }
 
     config.setupComplete = true;
     writeConfig(config);

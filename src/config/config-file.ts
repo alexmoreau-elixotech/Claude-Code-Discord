@@ -11,6 +11,7 @@ export interface SetupConfig {
     userId?: string;
     roleId?: string;
   };
+  claudeHome: string;
   github?: {
     token: string;
   };
@@ -45,7 +46,7 @@ export function readConfig(): SetupConfig {
     throw new Error(`Config file not found at ${CONFIG_FILE}. Run setup first.`);
   }
   const raw = JSON.parse(readFileSync(CONFIG_FILE, 'utf-8'));
-  if (!raw.discord?.token || !raw.discord?.guildId || typeof raw.setupComplete !== 'boolean') {
+  if (!raw.discord?.token || !raw.discord?.guildId || !raw.claudeHome || typeof raw.setupComplete !== 'boolean') {
     throw new Error(`Invalid config file structure at ${CONFIG_FILE}`);
   }
   return raw as SetupConfig;
