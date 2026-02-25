@@ -11,9 +11,10 @@ import {
   ActionRowBuilder,
   ComponentType,
   EmbedBuilder,
+  AttachmentBuilder,
 } from 'discord.js';
 import { getProjectByChannelId } from '../config/store.js';
-import { ensureContainerRunning, writeFileToContainer } from '../container/manager.js';
+import { ensureContainerRunning, writeFileToContainer, readFileFromContainer } from '../container/manager.js';
 import { ClaudeSession } from '../bridge/session.js';
 import {
   formatTextResponse,
@@ -337,6 +338,25 @@ function createSession(
         await origMsg.reactions.removeAll();
         await origMsg.react(isError ? '\u274C' : '\u2705');
       } catch { /* may lack permissions */ }
+    }
+
+    // Detect image file paths in the response and send them as attachments
+    const imagePathRegex = /\/workspace\/\S+\.(?:png|jpg|jpeg|gif|webp)/gi;
+    const imagePaths = [...new Set(fullText.match(imagePathRegex) || [])];
+    for (const imagePath of imagePaths) {
+      try {
+        const imageBuffer = await readFileFromContainer(containerName, imagePath);
+        if (imageBuffer.length > 0) {
+          const fileName = imagePath.split('/').pop() || 'image.png';
+          const attachment = new AttachmentBuilder(imageBuffer, {
+            name: fileName,
+            description: 'Image from workspace',
+          });
+          await thread.send({ files: [attachment] });
+        }
+      } catch (err) {
+        console.error(`Failed to send image ${imagePath}:`, err);
+      }
     }
 
     responseBuffer = '';

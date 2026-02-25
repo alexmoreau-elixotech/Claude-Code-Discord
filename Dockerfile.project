@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     sudo \
+    zip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (needed for Claude Code CLI)
@@ -21,12 +22,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
 
-# Install Playwright system dependencies for headless Chrome testing
-RUN npx playwright install-deps chromium
+# Install Playwright MCP server for Claude's built-in plugin
+RUN npm install -g @playwright/mcp@0.0.41
 
-# Pre-install MCP server packages globally so they're available instantly
-RUN npm install -g @anthropic-ai/claude-code-mcp-server-playwright \
-    @modelcontextprotocol/server-github
+# Install Playwright system dependencies and browser
+RUN npx playwright install-deps chromium
 
 # Create a non-root user
 RUN useradd -m -s /bin/bash user \
