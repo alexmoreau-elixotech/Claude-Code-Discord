@@ -11,6 +11,7 @@ services:
     restart: unless-stopped
     environment:
       - DATA_DIR=/app/data
+      - HOST_ADDRESS=${HOST_ADDRESS:-localhost}
 
 volumes:
   config-data:

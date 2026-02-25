@@ -130,7 +130,7 @@ export async function createContainer(
   }
 
   // Port mapping for preview — map a range of ports
-  const portBindings: Record<string, Array<{ HostPort: string }>> = {};
+  const portBindings: Record<string, Array<{ HostIp?: string; HostPort: string }>> = {};
   const exposedPorts: Record<string, Record<string, never>> = {};
   if (mounts.previewPort) {
     const rangeSize = mounts.previewPortRangeSize || 5;
@@ -138,7 +138,7 @@ export async function createContainer(
       const p: number = mounts.previewPort + i;
       const containerPort = `${p}/tcp`;
       exposedPorts[containerPort] = {};
-      portBindings[containerPort] = [{ HostPort: String(p) }];
+      portBindings[containerPort] = [{ HostIp: '0.0.0.0', HostPort: String(p) }];
     }
   }
 

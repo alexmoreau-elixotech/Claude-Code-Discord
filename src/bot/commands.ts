@@ -28,6 +28,13 @@ import {
 import { removeSession } from './client.js';
 import { AppConfig } from '../config/types.js';
 import { addDownload } from '../web/server.js';
+/**
+ * Get the host machine's address for preview URLs.
+ * Set HOST_ADDRESS env var to make previews accessible from LAN.
+ */
+function getHostAddress(): string {
+  return process.env.HOST_ADDRESS || 'localhost';
+}
 
 const commands = [
   new SlashCommandBuilder()
@@ -594,10 +601,11 @@ async function handlePreview(
     }
 
     const lastPort = port + PREVIEW_PORT_RANGE_SIZE - 1;
+    const hostname = getHostAddress();
     const embed = new EmbedBuilder()
       .setTitle('Preview is live')
       .setDescription(
-        `Your project is running at:\n**http://localhost:${port}**\n\n` +
+        `Your project is running at:\n**http://${hostname}:${port}**\n\n` +
         `Ports **${port}–${lastPort}** are mapped for multi-service projects.\n` +
         `Command: \`${serverCmd}\`\n` +
         'Use `/preview stop` to shut it down.'
